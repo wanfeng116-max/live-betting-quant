@@ -1,6 +1,6 @@
 import os
 import requests
-
+import time
 # 从环境变量读取 API Key（这是绝对安全的做法，不会泄露密钥）
 api_key = os.environ.get('API_FOOTBALL_KEY')
 
