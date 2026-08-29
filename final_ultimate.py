@@ -27,7 +27,7 @@ LEAGUE_HIGH_RISK_KEYWORDS = [
     "Eredivisie",
     "Super Lig",
     "Saudi Pro League",
-    "A‑League"
+    "A-League"
 ]
 MIN_ELAPSED = 60
 MAX_ELAPSED = 71
@@ -36,7 +36,7 @@ MAX_TOTAL_SHOTS_ON_TARGET = 4
 MAX_TOTAL_CORNERS = 5
 MAX_TRAILING_SOT = 2
 STOP_AFTER_MATCH_COUNT = 3
-SUGGEST_TEXT = "建议下注10‑15元"
+SUGGEST_TEXT = "建议下注10-15元"
 # ====================================================
 
 
@@ -45,17 +45,17 @@ def get_api_headers():
     if not api_key:
         print("【错误】环境变量 API_FOOTBALL_KEY 未设置，请配置密钥后再运行！")
         sys.exit(1)
-    return {"x‑apisports‑key": api_key}
+    return {"x-apisports-key": api_key}
 
 
 def fetch_live_matches():
-    url = "https://v3.football.api‑sports.io/fixtures?live=all"
+    url = "https://v3.football.api-sports.io/fixtures?live=all"
     headers = get_api_headers()
     req = request.Request(url, headers=headers)
     try:
         with request.urlopen(req, timeout=30) as resp:
             raw = resp.read()
-            data = json.loads(raw)
+            data = json.loads(raw.decode('utf-8'))
             return data.get("response", [])
     except (URLError, HTTPError, json.JSONDecodeError):
         return []
@@ -100,7 +100,7 @@ def main():
             continue
         if is_injury_time(status_short, elapsed):
             continue
-        # 时间窗口60‑71
+        # 时间窗口60-71
         if elapsed is None or not (MIN_ELAPSED <= elapsed <= MAX_ELAPSED):
             continue
         # 允许比分
