@@ -24,4 +24,4 @@ jobs:
       - name: Run fetch script
         env:
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
-        run: python fetch_live.py
+        python final_ultimate.py --mock
