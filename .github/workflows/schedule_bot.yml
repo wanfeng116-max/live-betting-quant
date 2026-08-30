@@ -2,24 +2,30 @@ name: Schedule Bot
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 23 * * *'
-permissions: contents: write
+    - cron: "0 11 * * *"
+
+permissions:
+  contents: write
+
 jobs:
   schedule:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Run script
+
+      - name: Run fetch_schedule.py
         env:
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
         run: python fetch_schedule.py
-      - name: Commit HTML
+
+      - name: Commit & Push schedule.html
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add schedule.html || true
-          git commit -m "Update schedule $(date +%Y%m%d)" || echo "no changes"
+          git commit -m "🤖 Auto update daily schedule" || echo "no file changes, skip commit"
           git push
