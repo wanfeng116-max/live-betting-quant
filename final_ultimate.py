@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """
 final_ultimate.py 滚球高胜率筛选器
-修复 latin‑1 编码报错：使用quote对推送内容做url编码
+彻底修复 latin-1 编码报错：全部特殊短横线替换为普通'-'，quote编码Bark推送
 新增：球队英文转中文 + Bark推送
-约束：仅使用urllib json，无第三方库；支持--mock；北京时间23:30后退出；找到3‑5场退出省API额度
+约束：仅使用urllib json，无第三方库；支持--mock；北京时间23:30后退出；找到3-5场退出省API额度
 """
 
 import argparse
@@ -13,7 +13,7 @@ import os
 import sys
 import urllib.request
 from urllib.parse import quote
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # ===================== 球队名称中英翻译字典 =====================
 TEAM_NAME_MAP = {
@@ -29,12 +29,15 @@ TEAM_NAME_MAP = {
     "Dynamo Moscow": "莫斯科迪纳摩"
 }
 
-# ===================== 联赛配置 =====================
+# ===================== 联赛配置 全部使用普通减号- =====================
 LEAGUE_WHITELIST = ["Segunda Division", "Serie B", "K League 1", "Premier League Russia", "Brasileiro Serie B"]
-LEAGUE_BLACKLIST = ["Eredivisie", "Super Lig", "Saudi Pro League", "A‑League"]
+LEAGUE_BLACKLIST = ["Eredivisie", "Super Lig", "Saudi Pro League", "A-League"]
 
 # Bark推送地址
 BARK_URL = "https://api.day.app/xFZcs4kMkNaRxVs3aXzzfM/"
+
+# 北京时间时区
+BJ_TZ = timezone(timedelta(hours=8))
 
 # ===================== 球队翻译函数 =====================
 def translate_team_name(team_name):
@@ -45,9 +48,8 @@ def translate_team_name(team_name):
 
 
 def send_bark_notification(title, content):
-    """使用urllib发送Bark推送消息，quote编码解决中文latin‑1编码报错"""
+    """使用urllib发送Bark推送消息，quote编码解决中文特殊字符编码报错"""
     try:
-        # 对标题、内容进行URL编码，避免中文特殊字符编码异常
         encoded_title = quote(title)
         encoded_body = quote(content)
         full_url = f"{BARK_URL}{encoded_title}/{encoded_body}"
@@ -76,20 +78,20 @@ def main():
         sys.exit(1)
 
     # 获取当前北京时间，23:30之后直接退出
-    now_beijing = datetime.now()
+    now_beijing = datetime.now(BJ_TZ)
     current_hour = now_beijing.hour
     current_minute = now_beijing.minute
     if current_hour >= 23 and current_minute >= 30:
         print(f"🕐 当前北京时间 {current_hour}:{current_minute}，23:30之后停止运行，程序退出")
         sys.exit(0)
 
+    # 【关键修正】正确的 API 头部和地址
     headers = {
-        "x‑rapidapi‑key": api_key,
-        "x‑rapidapi‑host": "v3.football.api‑sparta.io"
+        "x-apisports-key": api_key
     }
 
     # 请求实时live全部比赛
-    url = "https://v3.football.api‑sparta.io/fixtures?live=all"
+    url = "https://v3.football.api-sports.io/fixtures?live=all"
     req = urllib.request.Request(url, headers=headers)
 
     try:
@@ -124,7 +126,7 @@ def main():
         if league_name not in LEAGUE_WHITELIST:
             continue
 
-        # 比赛时间条件：50‑70分钟，排除带+补时
+        # 比赛时间条件：50-70分钟，排除带+补时
         if not (50 <= minute <= 70):
             continue
         if "+" in str(status_short):
@@ -132,8 +134,8 @@ def main():
 
         home_goals = item.get("goals", {}).get("home", 0) or 0
         away_goals = item.get("goals", {}).get("away", 0) or 0
-        score_str = f"{home_goals}‑{away_goals}"
-        allow_score = ["0‑0", "1‑0", "0‑1", "1‑1"]
+        score_str = f"{home_goals}-{away_goals}"
+        allow_score = ["0-0", "1-0", "0-1", "1-1"]
         if score_str not in allow_score:
             continue
 
@@ -148,7 +150,7 @@ def main():
         match_hit_list.append(match_info)
         print(f"✅命中候选比赛｜{league_name}｜{home_cn} VS {away_cn}｜{minute}分钟｜比分 {score_str}")
 
-        # 找到3‑5场就停止遍历，节省API额度
+        # 找到3-5场就停止遍历，节省API额度
         if len(match_hit_list) >= 4:
             break
 
