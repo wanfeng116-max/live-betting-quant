@@ -33,7 +33,6 @@ def get_api_key():
 
 def fetch_fixtures(date_str: str, api_key: str):
     """调用api-sports fixtures?date=xxx 获取当日赛程"""
-    # 使用标准减号
     url = f"https://v3.football.api-sports.io/fixtures?date={urllib.parse.quote(date_str)}"
     headers = {
         "x-apisports-key": api_key
@@ -50,11 +49,8 @@ def utc_to_beijing(utc_iso_str: str):
     输入示例："2026-08-30T16:00:00Z"
     返回格式化字符串 "2026-08-30 24:00"
     """
-    # 强制把时间标记为UTC，避免服务器时区导致计算错误
     dt_utc = datetime.fromisoformat(utc_iso_str.replace("Z", "+00:00"))
-    # 增加8小时
     dt_beijing = dt_utc + timedelta(hours=8)
-    # 格式化输出，必须用标准减号
     return dt_beijing.strftime("%Y-%m-%d %H:%M")
 
 def generate_html(match_list):
@@ -70,14 +66,14 @@ def generate_html(match_list):
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>白名单联赛赛程</title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif;}
-body{padding:16px;background:#f5f7fa;}
-h1{text-align:center;margin-bottom:16px;font-size:20px;color:#222;}
-table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 6px #00000014;}
-th,td{padding:12px 8px;text-align:left;border-bottom:1px solid #eee;font-size:14px;}
-th{background:#2c3e50;color:#fff;}
-tr:nth-child(even){background:#fafbfc;}
-.tip{margin-top:12px;text-align:center;color:#666;font-size:13px;}
+*{{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif;}}
+body{{padding:16px;background:#f5f7fa;}}
+h1{{text-align:center;margin-bottom:16px;font-size:20px;color:#222;}}
+table{{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 6px #00000014;}}
+th,td{{padding:12px 8px;text-align:left;border-bottom:1px solid #eee;font-size:14px;}}
+th{{background:#2c3e50;color:#fff;}}
+tr:nth-child(even){{background:#fafbfc;}}
+.tip{{margin-top:12px;text-align:center;color:#666;font-size:13px;}}
 </style>
 </head>
 <body>
@@ -117,7 +113,6 @@ def main():
     parser.add_argument("--mock", action="store_true", help="模拟模式，不请求真实API，输出模拟schedule.html")
     args = parser.parse_args()
 
-    # mock模式
     if args.mock:
         print("mock 模拟模式运行，不调用API")
         mock_data = [
@@ -140,7 +135,6 @@ def main():
         print(f"模拟完成，已生成 {OUTPUT_HTML}")
         return
 
-    # 获取查询日期，不传则取本地日期
     if args.date:
         query_date = args.date
     else:
@@ -153,7 +147,6 @@ def main():
     parsed_list = []
     for item in raw_matches:
         league_name = item["league"]["name"]
-        # 过滤白名单联赛
         if league_name not in LEAGUE_WHITELIST:
             continue
         kick_utc_str = item["fixture"]["date"]
@@ -169,7 +162,6 @@ def main():
             "away": away_name
         })
 
-    # 按照开球北京时间排序（底层用utc原始字符串排序即可）
     parsed_list.sort(key=lambda x:x["kick_utc_raw"])
 
     html_content = generate_html(parsed_list)
