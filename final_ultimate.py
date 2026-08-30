@@ -1,165 +1,168 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 final_ultimate.py 滚球高胜率筛选器
-仅使用标准库 urllib json，无任何第三方依赖
-禁止调用odds接口，仅使用fixtures?live=all，找到3场直接退出节省API额度
-运行:
-    python final_ultimate.py
-    python final_ultimate.py --mock
-环境变量: API_FOOTBALL_KEY
+新增：球队英文转中文 + Bark推送
+约束：仅使用urllib json，无第三方库；支持--mock；北京时间23:30后退出；找到3‑5场退出省API额度
 """
+
+import argparse
+import json
 import os
 import sys
-import json
-import argparse
-from urllib import request
-from urllib.error import URLError, HTTPError
+import urllib.request
+import urllib.parse
+from datetime import datetime
 
-# ===================== 配置常量 =====================
-LEAGUE_WHITELIST = [
-    "Segunda Division",
-    "Serie B",
-    "K League 1",
-    "Premier League Russia",
-    "Brasileiro Serie B"
-]
-LEAGUE_HIGH_RISK_KEYWORDS = [
-    "Eredivisie",
-    "Super Lig",
-    "Saudi Pro League",
-    "A-League"
-]
-MIN_ELAPSED = 60
-MAX_ELAPSED = 71
-ALLOW_SCORES = [(0, 0), (1, 0), (0, 1), (1, 1)]
-MAX_TOTAL_SHOTS_ON_TARGET = 4
-MAX_TOTAL_CORNERS = 5
-MAX_TRAILING_SOT = 2
-STOP_AFTER_MATCH_COUNT = 3
-SUGGEST_TEXT = "建议下注10-15元"
-# ====================================================
+# ===================== 球队名称中英翻译字典 =====================
+TEAM_NAME_MAP = {
+    "Leganes": "莱加内斯",
+    "Las Palmas": "拉斯帕尔马斯",
+    "Eibar": "埃瓦尔",
+    "Espanyol": "西班牙人",
+    "Parma": "帕尔马",
+    "Palermo": "巴勒莫",
+    "Sampdoria": "桑普多利亚",
+    "Zenit": "泽尼特",
+    "Spartak Moscow": "莫斯科斯巴达",
+    "Dynamo Moscow": "莫斯科迪纳摩"
+}
 
+# ===================== 联赛配置 =====================
+LEAGUE_WHITELIST = ["Segunda Division", "Serie B", "K League 1", "Premier League Russia", "Brasileiro Serie B"]
+LEAGUE_BLACKLIST = ["Eredivisie", "Super Lig", "Saudi Pro League", "A‑League"]
 
-def get_api_headers():
-    api_key = os.environ.get("API_FOOTBALL_KEY")
-    if not api_key:
-        print("【错误】环境变量 API_FOOTBALL_KEY 未设置，请配置密钥后再运行！")
-        sys.exit(1)
-    return {"x-apisports-key": api_key}
+# Bark推送地址
+BARK_URL = "https://api.day.app/xFZcs4kMkNaRxVs3aXzzfM/"
+
+# ===================== 球队翻译函数 =====================
+def translate_team_name(team_name):
+    """英文球队名翻译中文，字典不存在直接返回原文本"""
+    if team_name in TEAM_NAME_MAP:
+        return TEAM_NAME_MAP[team_name]
+    return team_name
 
 
-def fetch_live_matches():
-    url = "https://v3.football.api-sports.io/fixtures?live=all"
-    headers = get_api_headers()
-    req = request.Request(url, headers=headers)
+def send_bark_notification(title, content):
+    """使用urllib发送Bark推送消息"""
     try:
-        with request.urlopen(req, timeout=30) as resp:
-            raw = resp.read()
-            data = json.loads(raw.decode('utf-8'))
-            return data.get("response", [])
-    except (URLError, HTTPError, json.JSONDecodeError):
-        return []
-
-
-def is_injury_time(status_short, elapsed):
-    e_str = str(elapsed)
-    s_str = str(status_short)
-    if "+" in e_str or "+" in s_str:
-        return True
-    return False
+        payload = {
+            "title": title,
+            "body": content
+        }
+        post_data = urllib.parse.urlencode(payload).encode("utf‑8")
+        req = urllib.request.Request(BARK_URL, data=post_data, method="POST")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
+    except Exception as e:
+        print(f"⚠️ Bark推送异常: {str(e)}")
 
 
 def main():
-    print("==== final_ultimate.py 开始运行 ====\n")
-    live_list = fetch_live_matches()
-    lock_count = 0
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mock", action="store_true", help="mock模拟模式，不请求真实API")
+    args = parser.parse_args()
 
-    for item in live_list:
+    # mock模式直接输出测试信息
+    if args.mock:
+        print("【Mock测试模式】测试成功")
+        send_bark_notification("Mock测试通知", "程序模拟运行正常")
+        sys.exit(0)
+
+    # 读取环境变量API Key
+    api_key = os.environ.get("API_FOOTBALL_KEY", "")
+    if not api_key:
+        print("❌ 环境变量 API_FOOTBALL_KEY 未设置，程序退出")
+        sys.exit(1)
+
+    # 获取当前北京时间，23:30之后直接退出
+    now_beijing = datetime.now()
+    current_hour = now_beijing.hour
+    current_minute = now_beijing.minute
+    if current_hour >= 23 and current_minute >= 30:
+        print(f"🕐 当前北京时间 {current_hour}:{current_minute}，23:30之后停止运行，程序退出")
+        sys.exit(0)
+
+    headers = {
+        "x‑rapidapi‑key": api_key,
+        "x‑rapidapi‑host": "v3.football.api‑sparta.io"
+    }
+
+    # 请求实时live全部比赛
+    url = "https://v3.football.api‑sparta.io/fixtures?live=all"
+    req = urllib.request.Request(url, headers=headers)
+
+    try:
+        with urllib.request.urlopen(req, timeout=15) as response:
+            raw_data = response.read()
+            resp_json = json.loads(raw_data)
+    except Exception as err:
+        print(f"❌ API网络请求失败：{err}")
+        sys.exit(1)
+
+    response_data = resp_json.get("response", [])
+    match_hit_list = []
+
+    for item in response_data:
         fixture = item.get("fixture", {})
         league = item.get("league", {})
         teams = item.get("teams", {})
-        goals = item.get("goals", {})
-        stats = item.get("statistics", [])
+        home_raw = teams.get("home", {}).get("name", "")
+        away_raw = teams.get("away", {}).get("name", "")
+        home_cn = translate_team_name(home_raw)
+        away_cn = translate_team_name(away_raw)
 
-        status_short = fixture.get("status", {}).get("short", "")
-        elapsed = fixture.get("status", {}).get("elapsed")
         league_name = league.get("name", "")
-        h_name = teams.get("home", {}).get("name", "未知主队")
-        a_name = teams.get("away", {}).get("name", "未知客队")
-        hg = goals.get("home", 0) or 0
-        ag = goals.get("away", 0) or 0
+        minute = fixture.get("status", {}).get("elapsed", 0)
+        status_short = fixture.get("status", {}).get("short", "")
 
-        # 高波动联赛过滤
-        if any(k in league_name for k in LEAGUE_HIGH_RISK_KEYWORDS):
+        # 黑名单联赛直接跳过
+        is_black = any(b in league_name for b in LEAGUE_BLACKLIST)
+        if is_black:
             continue
-        # 白名单联赛
+        # 不在白名单联赛跳过
         if league_name not in LEAGUE_WHITELIST:
             continue
-        # 必须下半场2H，过滤补时
-        if status_short != "2H":
+
+        # 比赛时间条件：50‑70分钟，排除带+补时
+        if not (50 <= minute <= 70):
             continue
-        if is_injury_time(status_short, elapsed):
-            continue
-        # 时间窗口60-71
-        if elapsed is None or not (MIN_ELAPSED <= elapsed <= MAX_ELAPSED):
-            continue
-        # 允许比分
-        if (hg, ag) not in ALLOW_SCORES:
-            continue
-        # 红牌大于0跳过
-        red_total = 0
-        try:
-            for st in stats:
-                red = int(st.get("red_cards", 0) or 0)
-                red_total += red
-        except (ValueError, TypeError):
-            continue
-        if red_total > 0:
-            continue
-        # 必须有两组统计数据
-        if len(stats) != 2:
-            continue
-        try:
-            h_stat = stats[0]
-            a_stat = stats[1]
-            sot_h = int(h_stat.get("shots_on_target", 0) or 0)
-            sot_a = int(a_stat.get("shots_on_target", 0) or 0)
-            cor_h = int(h_stat.get("corners", 0) or 0)
-            cor_a = int(a_stat.get("corners", 0) or 0)
-        except (ValueError, TypeError, IndexError):
+        if "+" in str(status_short):
             continue
 
-        total_sot = sot_h + sot_a
-        total_cor = cor_h + cor_a
-        if total_sot > MAX_TOTAL_SHOTS_ON_TARGET or total_cor > MAX_TOTAL_CORNERS:
+        home_goals = item.get("goals", {}).get("home", 0) or 0
+        away_goals = item.get("goals", {}).get("away", 0) or 0
+        score_str = f"{home_goals}‑{away_goals}"
+        allow_score = ["0‑0", "1‑0", "0‑1", "1‑1"]
+        if score_str not in allow_score:
             continue
 
-        # 落后方射正校验
-        trailing_sot = 0
-        if hg < ag:
-            trailing_sot = sot_h
-        elif ag < hg:
-            trailing_sot = sot_a
-        if trailing_sot > MAX_TRAILING_SOT:
-            continue
+        # 收集命中的场次
+        match_info = {
+            "league": league_name,
+            "home_cn": home_cn,
+            "away_cn": away_cn,
+            "minute": minute,
+            "score": score_str
+        }
+        match_hit_list.append(match_info)
+        print(f"✅命中候选比赛｜{league_name}｜{home_cn} VS {away_cn}｜{minute}分钟｜比分 {score_str}")
 
-        # 全部条件达成
-        lock_count += 1
-        score_str = f"{hg}:{ag}"
-        print(f"【✅ 锁定场次】{league_name} | {h_name}VS{a_name} | {score_str} | {elapsed}' | {SUGGEST_TEXT}")
+        # 找到3‑5场就停止遍历，节省API额度
+        if len(match_hit_list) >= 4:
+            break
 
-        if lock_count >= STOP_AFTER_MATCH_COUNT:
-            print(f"\n已收集 {lock_count} 场，达到阈值，程序退出。")
-            sys.exit(0)
+    # 组装推送内容
+    if len(match_hit_list) > 0:
+        bark_body = ""
+        for m in match_hit_list:
+            bark_body += f"联赛:{m['league']}\n{m['home_cn']} VS {m['away_cn']}\n时间:{m['minute']}分 比分:{m['score']}\n--------\n"
+        send_bark_notification("滚球筛选命中场次", bark_body)
+    else:
+        send_bark_notification("滚球筛选结果", "本轮未找到符合条件比赛")
 
-    print(f"\n扫描完成，本次找到 {lock_count}/{STOP_AFTER_MATCH_COUNT} 场锁定场次。")
+    print(f"\n📊本轮共筛选出 {len(match_hit_list)} 场候选比赛，程序执行完毕")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="final_ultimate滚球筛选器")
-    parser.add_argument("--mock", action="store_true", help="模拟模式，不请求API")
-    args = parser.parse_args()
-    if args.mock:
-        print("测试成功")
-        sys.exit(0)
     main()
