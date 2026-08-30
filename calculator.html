@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>滚球信心分计算器</title>
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { background-color: #f4f6f9; padding:14px; min-height:100vh; }
+        .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 10px rgba(0,0,0,0.07); }
+        .title { font-size:20px; font-weight:700; text-align:center; margin-bottom:18px; color:#222; }
+        .sub-title { font-size:14px; color:#666; margin-bottom:10px; }
+        .upload-wrap { width:100%; position:relative; overflow:hidden; }
+        .btn { border:none; color:#fff; padding:13px; font-size:16px; border-radius:8px; width:100%; cursor:pointer; font-weight:600; }
+        .btn-blue { background-color:#007bff; }
+        .btn-gray { background-color:#6c757d; margin-top:10px; }
+        .btn-green { background-color:#28a745; }
+        .upload-wrap input[type=file]{ position:absolute; left:0; top:0; width:100%; height:100%; opacity:0; }
+        #preview { display:none; width:100%; max-height:280px; object-fit:contain; margin-top:14px; border-radius:8px; border:1px solid #e5e7eb; }
+        .input-group { margin-bottom:14px; }
+        .input-group label { display:block; font-size:14px; font-weight:600; margin-bottom:4px; color:#333; }
+        .input-group input,.input-group select { width:100%; padding:12px; border:1px solid #ddd; border-radius:6px; font-size:16px; background:#fff; }
+        #result-box { display:none; margin-top:16px; padding:16px; border-radius:8px; }
+        .pass { background:#d4edda; color:#155724; border:1px solid #c3e6cb; }
+        .fail { background:#f8d7da; color:#721c24; border:1px solid #f5c6cb; }
+        #score-display { font-size:38px; font-weight:800; text-align:center; margin:8px 0; }
+        #verdict { font-size:20px; text-align:center; font-weight:700; margin-bottom:14px; }
+        #details { list-style:none; margin-top:10px; padding-top:10px; border-top:1px solid #eee; }
+        #details li { display:flex; justify-content:space-between; font-size:14px; padding:7px 0; border-bottom:1px solid #f3f3f3; }
+        .deduct { font-weight:bold; }
+        .status { text-align:center; font-size:14px; color:#555; margin-top:12px; display:none; }
+        .tip { font-size:13px; color:#888; margin-top:8px; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <div class="title">⚽ 滚球信心分计算器</div>
+    <div class="sub-title">第一步：从相册上传雷速体育截图</div>
+    <div class="upload-wrap">
+        <button class="btn btn-blue">选择图片（相册）</button>
+        <input type="file" id="fileInput" accept="image/*">
+    </div>
+    <img id="preview" alt="预览">
+    <button id="ocrBtn" class="btn btn-gray" style="display:none;">识别截图提取数据</button>
+    <div class="status" id="statusText">正在加载OCR引擎，请稍候…</div>
+    <div class="tip">提示：OCR识别会出错，务必手动核对表单内容</div>
+</div>
+
+<div class="card">
+    <div class="sub-title">第二步：核对/手动填写比赛信息</div>
+    <div class="input-group">
+        <label>联赛名称</label>
+        <input type="text" id="league" placeholder="西乙 / 意乙 / 荷甲…">
+    </div>
+    <div class="input-group">
+        <label>比赛分钟（不带+，例：62；带补时填62+）</label>
+        <input type="text" id="minute" placeholder="62">
+    </div>
+    <div class="input-group">
+        <label>当前比分（0‑0 / 1‑0 / 0‑1 / 1‑1）</label>
+        <input type="text" id="score" placeholder="1‑1">
+    </div>
+    <div class="input-group">
+        <label>红牌数量</label>
+        <input type="number" id="red" value="0">
+    </div>
+    <div class="input-group">
+        <label>黄牌数量</label>
+        <input type="number" id="yellow" value="0">
+    </div>
+    <div class="input-group">
+        <label>射正总数</label>
+        <input type="number" id="sot" value="0">
+    </div>
+    <div class="input-group">
+        <label>角球总数</label>
+        <input type="number" id="corner" value="0">
+    </div>
+    <div class="input-group">
+        <label>投注赔率</label>
+        <input type="number" id="odds" step="0.01" value="1.80">
+    </div>
+    <div class="input-group">
+        <label>盘口是否剧烈跳动</label>
+        <select id="jump">
+            <option value="no">否，盘口平稳</option>
+            <option value="yes">是，盘口剧烈跳动</option>
+        </select>
+    </div>
+    <button class="btn btn-green" onclick="calc()">🔍 计算信心分</button>
+</div>
+
+<div class="card" id="resultBox">
+    <div id="score-display">0</div>
+    <div id="verdict">结论</div>
+    <div style="font-weight:700;margin-top:12px;">扣分明细</div>
+    <ul id="details"></ul>
+</div>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const preview = document.getElementById('preview');
+const ocrBtn = document.getElementById('ocrBtn');
+const statusText = document.getElementById('statusText');
+
+fileInput.addEventListener('change', e=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ev=>{
+        preview.src = ev.target.result;
+        preview.style.display = 'block';
+        ocrBtn.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+});
+
+ocrBtn.addEventListener('click',async ()=>{
+    statusText.style.display = 'block';
+    statusText.textContent = '正在识别图片…';
+    ocrBtn.disabled = true;
+    try{
+        const {data:{text}} = await Tesseract.recognize(preview,'chi_sim+eng',{
+            logger:m=>{
+                if(m.status==='recognizing text') statusText.textContent = `识别进度 ${Math.round(m.progress*100)}%`;
+            }
+        });
+        const txt = text.replace(/\s+/g,' ');
+        //联赛匹配
+        const leagueKeys = ["西乙","意乙","俄超","韩K","巴乙","荷甲","土超","沙特联","澳甲","德乙"];
+        const findLg = leagueKeys.find(k=>txt.includes(k));
+        if(findLg) document.getElementById('league').value = findLg;
+        //分钟，支持60+格式
+        const minMatch = txt.match(/(\d{1,2}\+?)\s*分钟/);
+        if(minMatch) document.getElementById('minute').value = minMatch[1];
+        //比分
+        const scMatch = txt.match(/(\d-\d)/);
+        if(scMatch) document.getElementById('score').value = scMatch[1];
+        //赔率
+        const oddMatch = txt.match(/(\d+\.\d{2})/);
+        if(oddMatch) document.getElementById('odds').value = oddMatch[1];
+        statusText.textContent = "✅识别完成，请核对表单！";
+    }catch(err){
+        console.error(err);
+        statusText.textContent = "❌识别失败，请全部手动填写";
+    }
+    ocrBtn.disabled = false;
+});
+
+function calc(){
+    let score = 100;
+    const deducts = [];
+
+    const league = document.getElementById('league').value.trim();
+    const minRaw = document.getElementById('minute').value.trim();
+    const scoreStr = document.getElementById('score').value.trim();
+    const red = Number(document.getElementById('red').value)||0;
+    const yellow = Number(document.getElementById('yellow').value)||0;
+    const sot = Number(document.getElementById('sot').value)||0;
+    const corner = Number(document.getElementById('corner').value)||0;
+    const odds = Number(document.getElementById('odds').value)||0;
+    const jump = document.getElementById('jump').value;
+
+    const whitelist = ["西乙","意乙","俄超","韩K","巴乙"];
+    const blacklist = ["荷甲","土超","沙特联","澳甲","德乙"];
+
+    //黑名单直接0分
+    if(blacklist.some(x=>league.includes(x))){
+        deducts.push({text:`黑名单联赛【${league}】禁止投注`,pts:100});
+        score -=100;
+    }else if(!whitelist.some(x=>league.includes(x))){
+        deducts.push({text:`非白名单联赛【${league}】大扣分`,pts:60});
+        score -=60;
+    }
+
+    //时间校验，包含+补时直接扣分
+    const hasPlus = minRaw.includes('+');
+    const minuteNum = parseInt(minRaw.replace('+',''));
+    if(hasPlus){
+        deducts.push({text:`存在补时${minRaw}，扣分`,pts:25});
+        score -=25;
+    }
+    if(isNaN(minuteNum) || minuteNum<50 || minuteNum>72){
+        deducts.push({text:`比赛时间${minRaw}，不在50‑72分钟区间`,pts:30});
+        score -=30;
+    }
+
+    //比分
+    const allowScore = ["0-0","1-0","0-1","1-1"];
+    if(!allowScore.includes(scoreStr)){
+        deducts.push({text:`比分${scoreStr}不在允许列表，直接淘汰`,pts:100});
+        score -=100;
+    }
+
+    //红黄牌
+    if(red>=1){
+        deducts.push({text:"出现红牌，直接淘汰",pts:100});
+        score -=100;
+    }
+    if(yellow>=4){
+        deducts.push({text:`黄牌${yellow}张过多，扣20分`,pts:20});
+        score -=20;
+    }
+
+    if(sot>=8){
+        deducts.push({text:`射正合计${sot}≥8，扣30分`,pts:30});
+        score -=30;
+    }
+    if(corner>=8){
+        deducts.push({text:`角球合计${corner}≥8，扣30分`,pts:30});
+        score -=30;
+    }
+    if(sot>5 && scoreStr!=='0-0'){
+        deducts.push({text:"落后方进攻碾压风险，扣15分",pts:15});
+        score -=15;
+    }
+
+    if(jump==='yes'){
+        deducts.push({text:"盘口剧烈跳动，扣40分",pts:40});
+        score -=40;
+    }
+
+    if(odds<1.50 || odds>2.20){
+        deducts.push({text:`赔率${odds}超出1.5‑2.2，大幅扣分`,pts:40});
+        score -=40;
+    }else if(odds<1.60 || odds>2.10){
+        deducts.push({text:`赔率${odds}轻微偏离最优区间`,pts:10});
+        score -=10;
+    }
+
+    score = Math.max(0,score);
+
+    const box = document.getElementById('resultBox');
+    const scoreDom = document.getElementById('score-display');
+    const verdictDom = document.getElementById('verdict');
+    const listDom = document.getElementById('details');
+    listDom.innerHTML = '';
+
+    deducts.forEach(d=>{
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${d.text}</span><span class="deduct">-${d.pts}分</span>`;
+        listDom.appendChild(li);
+    });
+
+    if(score>=60){
+        box.className = 'card pass';
+        verdictDom.innerText = '✅高信心锁定，可以投注';
+    }else{
+        box.className = 'card fail';
+        verdictDom.innerText = '❌信心不足，禁止投注';
+    }
+    scoreDom.innerText = score+'分';
+    box.style.display = 'block';
+    box.scrollIntoView({behavior:'smooth'});
+}
+</script>
+</body>
+</html>
