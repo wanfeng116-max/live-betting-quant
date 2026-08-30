@@ -34,7 +34,7 @@ LEAGUE_WHITELIST = ["Segunda Division", "Serie B", "K League 1", "Premier League
 LEAGUE_BLACKLIST = ["Eredivisie", "Super Lig", "Saudi Pro League", "A-League"]
 
 # Bark推送地址
-BARK_URL = "https://api.day.app/xFZcs4kMkNaRxVs3aXzzfM/"
+BARK_URL = "https://api.day.app/xZFcs4kMkNaRxVs3aXzzfM/"
 
 # 北京时间时区
 BJ_TZ = timezone(timedelta(hours=8))
