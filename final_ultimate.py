@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 final_ultimate.py 滚球高胜率筛选器
+修复 latin‑1 编码报错：使用quote对推送内容做url编码
 新增：球队英文转中文 + Bark推送
 约束：仅使用urllib json，无第三方库；支持--mock；北京时间23:30后退出；找到3‑5场退出省API额度
 """
@@ -11,7 +12,7 @@ import json
 import os
 import sys
 import urllib.request
-import urllib.parse
+from urllib.parse import quote
 from datetime import datetime
 
 # ===================== 球队名称中英翻译字典 =====================
@@ -44,14 +45,13 @@ def translate_team_name(team_name):
 
 
 def send_bark_notification(title, content):
-    """使用urllib发送Bark推送消息"""
+    """使用urllib发送Bark推送消息，quote编码解决中文latin‑1编码报错"""
     try:
-        payload = {
-            "title": title,
-            "body": content
-        }
-        post_data = urllib.parse.urlencode(payload).encode("utf‑8")
-        req = urllib.request.Request(BARK_URL, data=post_data, method="POST")
+        # 对标题、内容进行URL编码，避免中文特殊字符编码异常
+        encoded_title = quote(title)
+        encoded_body = quote(content)
+        full_url = f"{BARK_URL}{encoded_title}/{encoded_body}"
+        req = urllib.request.Request(full_url, method="GET")
         with urllib.request.urlopen(req, timeout=10) as resp:
             resp.read()
     except Exception as e:
@@ -66,7 +66,7 @@ def main():
     # mock模式直接输出测试信息
     if args.mock:
         print("【Mock测试模式】测试成功")
-        send_bark_notification("Mock测试通知", "程序模拟运行正常")
+        send_bark_notification("Mock测试通知", "程序模拟运行正常，中文测试：莱加内斯 VS 埃瓦尔")
         sys.exit(0)
 
     # 读取环境变量API Key
