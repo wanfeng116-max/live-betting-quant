@@ -1,3 +1,4 @@
+import os
 import sys
 import json
 import argparse
@@ -6,28 +7,157 @@ import urllib.parse
 import urllib.error
 
 # ==========================================
-# 0. 推送配置与常量定义
+# 0. 推送配置与翻译映射字典
 # ==========================================
 BARK_BASE_URL = "https://api.day.app/xZFcs4kMkNaRxVs3aXzzfM/"
 
-# 【联赛波动等级硬编码字典】
+# 联赛波动等级硬编码字典
 VOLATILITY_DICT = {
     # 低波动（白名单）
     "西乙": "LOW",
+    "Segunda División": "LOW",
     "意乙": "LOW",
+    "Serie B": "LOW",
     "巴乙": "LOW",
+    "Serie B - Brazil": "LOW",
     "韩K1": "LOW",
+    "K League 1": "LOW",
     "俄超": "LOW",
-    "解放者杯": "LOW",  # 配合过滤逻辑，淘汰赛需人工校验
+    "Premier League - Russia": "LOW",
+    "解放者杯": "LOW",
+    "Copa Libertadores": "LOW",
     # 中波动（直接跳过）
     "中超": "MID",
+    "Super League": "MID",
     # 极高波动（黑名单，直接跳过）
     "荷甲": "HIGH",
+    "Eredivisie": "HIGH",
     "荷乙": "HIGH",
+    "Eerste Divisie": "HIGH",
     "奥甲": "HIGH",
+    "Bundesliga - Austria": "HIGH",
     "土超": "HIGH",
+    "Süper Lig": "HIGH",
     "沙特联": "HIGH",
+    "Pro League": "HIGH",
     "澳超": "HIGH",
+    "A-League": "HIGH",
+}
+
+# 联赛名称中文翻译字典
+LEAGUE_NAME_MAP = {
+    "Segunda División": "西乙",
+    "La Liga 2": "西乙",
+    "Serie B": "意乙",
+    "K League 1": "韩K1",
+    "Premier League - Russia": "俄超",
+    "Russian Premier League": "俄超",
+    "Serie B - Brazil": "巴乙",
+    "Copa Libertadores": "解放者杯",
+}
+
+# 常见球队名称中文翻译字典（涵盖西乙、意乙、俄超、韩K1、巴乙）
+TEAM_NAME_MAP = {
+    # --- 西乙 ---
+    "Leganes": "莱加内斯",
+    "Las Palmas": "拉斯帕尔马斯",
+    "Real Zaragoza": "萨拉戈萨",
+    "Sporting Gijon": "希洪竞技",
+    "Espanyol": "西班牙人",
+    "Eibar": "埃瓦尔",
+    "Valladolid": "巴利亚多利德",
+    "Oviedo": "奥维耶多",
+    "Racing Santander": "桑坦德竞技",
+    "Tenerife": "特内里费",
+    "Albacete": "阿尔巴塞特",
+    "Burgos": "布尔戈斯",
+    "Levante": "莱万特",
+    "Elche": "埃尔切",
+    "Cartagena": "卡塔赫纳",
+    "Huesca": "韦斯卡",
+    "Mirandes": "米兰德斯",
+    "Amorebieta": "阿莫雷比埃塔",
+    "Andorra FC": "安道尔FC",
+    "Alcorcon": "阿尔科孔",
+    "Villarreal B": "比利亚雷亚尔B队",
+    "Ferrol": "费罗尔竞技",
+
+    # --- 意乙 ---
+    "Parma": "帕尔马",
+    "Venezia": "威尼斯",
+    "Cremonese": "克雷莫内塞",
+    "Como": "科莫",
+    "Palermo": "巴勒莫",
+    "Catanzaro": "卡坦扎罗",
+    "Brescia": "布雷西亚",
+    "Sampdoria": "桑普多利亚",
+    "Cosenza": "科森扎",
+    "Bari": "巴里",
+    "Pisa": "比萨",
+    "Reggiana": "雷吉亚纳",
+    "Sudtirol": "苏蒂罗尔",
+    "Modena": "摩德纳",
+    "Spezia": "斯佩齐亚",
+    "Ternana": "特尔纳纳",
+    "Ascoli": "阿斯科利",
+    "Feralpisalo": "费拉尔皮萨洛",
+    "Lecco": "莱科",
+    "FeralpiSalo": "费拉尔皮萨洛",
+
+    # --- 俄超 ---
+    "Zenit Saint Petersburg": "泽尼特",
+    "Krasnodar": "克拉斯诺达尔",
+    "Dynamo Moscow": "莫斯科 dynamically",
+    "Spartak Moscow": "莫斯科斯巴达",
+    "Lokomotiv Moscow": "莫斯科火车头",
+    "CSKA Moscow": "莫斯科中央陆军",
+    "Rostov": "罗斯托夫",
+    "Krylya Sovetov": "苏维埃翼",
+    "Rubin Kazan": "喀山红宝石",
+    "Ural": "乌拉尔",
+    "Fakel Voronezh": "沃罗涅日火炬",
+    "Orenburg": "奥伦堡",
+    "Nizhny Novgorod": "下诺夫哥罗德",
+    "Pari NN": "下诺夫哥罗德",
+    "Baltika": "波罗的海",
+    "Sochi": "索契",
+    "Akhmat Grozny": "阿赫马特",
+
+    # --- 韩K1 ---
+    "Ulsan Hyundai": "蔚山现代",
+    "Ulsan HD": "蔚山HD",
+    "Jeonbuk Motors": "全北现代",
+    "Pohang Steelers": "浦项制铁",
+    "Gwangju FC": "光州FC",
+    "Incheon Utd": "仁川联",
+    "Daegu FC": "大邱FC",
+    "FC Seoul": "首尔FC",
+    "Daejeon Citizen": "大田市民",
+    "Jeju United": "济州联",
+    "Suwon FC": "水原FC",
+    "Gangwon FC": "江原FC",
+    "Gimcheon Sangmu": "金泉尚武",
+
+    # --- 巴乙 ---
+    "Santos": "桑托斯",
+    "America Mineiro": "美洲矿工",
+    "Sport Recife": "力斯菲体育",
+    "Ceara": "塞阿拉",
+    "Goias": "戈亚斯",
+    "Coritiba": "库里蒂巴",
+    "Avaí": "阿瓦伊",
+    "Avai": "阿瓦伊",
+    "CRB": "CRB马塞约",
+    "Vila Nova": "维拉诺瓦",
+    "Novorizontino": "诺沃里宗蒂诺",
+    "Ponte Preta": "蓬特普雷塔",
+    "Operario-PR": "普利登斯",
+    "Chapecoense": "沙佩科恩斯",
+    "Guarani": "瓜拉尼",
+    "Ituano": "伊图阿诺",
+    "Botafogo SP": "博塔弗戈SP",
+    "Paysandu": "派桑杜",
+    "Bragantino": "布拉干蒂诺",
 }
 
 # 排除关键字（含杯赛、女足等，解放者杯除外）
@@ -35,24 +165,20 @@ EXCLUDE_KEYWORDS = ["女", "Women", "W", "杯", "Cup"]
 
 
 # ==========================================
-# 1. BARK 推送工具函数 (匹配指定 URL 格式)
+# 1. BARK 推送工具函数
 # ==========================================
 def send_bark_push(title: str, content: str, is_critical: bool = False):
     """
     发送 Bark 推送
-    :param title: 消息标题（拼接到 URL 路径第一层）
-    :param content: 消息内容（拼接到 URL 路径第二层）
-    :param is_critical: True - 使用格式: https://api.day.app/xZFcs4kMkNaRxVs3aXzzfM/标题/内容?level=critical&call=1
-                        False - 使用格式: https://api.day.app/xZFcs4kMkNaRxVs3aXzzfM/标题/内容?sound=minuet
+    :param is_critical: True 使用持续响铃 30 秒 (level=critical&call=1)
+                        False 使用普通响铃 (sound=minuet)
     """
     encoded_title = urllib.parse.quote(title)
     encoded_content = urllib.parse.quote(content)
     
     if is_critical:
-        # 模式 2：重注信号，30 秒持续响铃模式
         url = f"{BARK_BASE_URL}{encoded_title}/{encoded_content}?level=critical&call=1"
     else:
-        # 模式 1：55分钟观察，普通响铃模式
         url = f"{BARK_BASE_URL}{encoded_title}/{encoded_content}?sound=minuet"
 
     try:
@@ -64,14 +190,24 @@ def send_bark_push(title: str, content: str, is_critical: bool = False):
 
 
 # ==========================================
-# 2. 模式 1：55分钟低波动比赛自动预警
+# 2. 模式 1：55分钟低波动比赛自动预警 (带中文翻译)
 # ==========================================
-def run_mode_55m_auto(api_url: str):
+def run_mode_55m_auto():
     print("\n=== [模式 1] 运行 55分钟低波动比赛自动扫描 ===")
     
-    # 1. 拉取 API 数据
+    api_key = os.getenv("API_FOOTBALL_KEY", "").strip()
+    if not api_key:
+        print("[错误] 未配置环境变量 API_FOOTBALL_KEY，请在 GitHub Secrets 中配置！")
+        return
+
+    url = "https://v3.football.api-sports.io/fixtures?live=all"
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "x-apisports-key": api_key
+    }
+
     try:
-        req = urllib.request.Request(api_url, headers={"User-Agent": "Mozilla/5.0"})
+        req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=15) as response:
             raw_data = response.read().decode("utf-8")
             data = json.loads(raw_data)
@@ -79,78 +215,112 @@ def run_mode_55m_auto(api_url: str):
         print(f"[API 请求错误] 无法获取比赛数据: {e}")
         return
 
-    matches = data.get("data", []) if isinstance(data, dict) else data
+    matches = data.get("response", [])
     if not isinstance(matches, list):
-        print("[数据解析错误] 返回数据非预期列表")
+        print("[数据解析错误] API 返回 response 非预期列表")
         return
 
-    # 2. 逐场校验与过滤
-    for match in matches:
-        league = str(match.get("league_name", "")).strip()
-        minute = int(match.get("minute", 0))
-        home_team = match.get("home_team", "主队")
-        away_team = match.get("away_team", "客队")
-        home_score = match.get("home_score", 0)
-        away_score = match.get("away_score", 0)
+    print(f"当前实时抓取到 {len(matches)} 场比赛，正在分析...")
 
-        match_name = f"{home_team} vs {away_team}"
+    # 逐场校验与过滤
+    for item in matches:
+        try:
+            raw_league = str(item.get("league", {}).get("name", "")).strip()
+            minute = item.get("fixture", {}).get("status", {}).get("elapsed")
+            
+            if minute is None:
+                continue
+            minute = int(minute)
 
-        # ----------------------------------------------------
-        # ⚠️ 人工避雷注释提醒（代码无法判断的部分）：
-        # 1. 避开【莫斯科斯巴达】等攻防剧烈/神经质球队
-        # 2. 避开【争升班生死战】（最后几轮淘汰赛/附加赛，抢分期易失控）
-        # 3. 避开【主场战意极强/魔鬼主场】的超频压制场次
-        # ----------------------------------------------------
+            raw_home_team = str(item.get("teams", {}).get("home", {}).get("name", "主队")).strip()
+            raw_away_team = str(item.get("teams", {}).get("away", {}).get("name", "客队")).strip()
+            
+            goals = item.get("goals", {})
+            home_score = goals.get("home", 0) if goals.get("home") is not None else 0
+            away_score = goals.get("away", 0) if goals.get("away") is not None else 0
 
-        # A. 校验联赛波动级别 (必须属于低波动白名单)
-        matched_volatility = None
-        for key, vol in VOLATILITY_DICT.items():
-            if key in league:
-                matched_volatility = vol
-                break
+            # ----------------------------------------------------
+            # ⚠️ 人工避雷注释提醒（代码无法判断的部分）：
+            # 1. 避开【莫斯科斯巴达】等攻防剧烈/神经质球队
+            # 2. 避开【争升班生死战】（最后几轮淘汰赛/附加赛，抢分期易失控）
+            # 3. 避开【主场战意极强/魔鬼主场】的超频压制场次
+            # ----------------------------------------------------
 
-        if matched_volatility != "LOW":
-            continue  # 非低波动白名单（或属于中/高波动黑名单），跳过
+            # A. 校验联赛波动级别 (必须属于低波动白名单)
+            matched_volatility = None
+            for key, vol in VOLATILITY_DICT.items():
+                if key.lower() in raw_league.lower():
+                    matched_volatility = vol
+                    break
 
-        # B. 过滤杯赛（解放者杯淘汰赛除外）与女足
-        is_libertadores = "解放者杯" in league
-        if not is_libertadores and any(ex in league for ex in EXCLUDE_KEYWORDS):
+            if matched_volatility != "LOW":
+                continue  # 非低波动白名单（或属于中/高波动黑名单），跳过
+
+            # B. 过滤杯赛（解放者杯淘汰赛除外）与女足
+            is_libertadores = "解放者杯" in raw_league or "Libertadores" in raw_league
+            if not is_libertadores and any(ex in raw_league for ex in EXCLUDE_KEYWORDS):
+                continue
+
+            # C. 时间必须在 55-58 分钟
+            if not (55 <= minute <= 58):
+                continue
+
+            # D. 执行中文名称转换 (未查到映射则使用原始英文)
+            league_cn = LEAGUE_NAME_MAP.get(raw_league, raw_league)
+            home_team_cn = TEAM_NAME_MAP.get(raw_home_team, raw_home_team)
+            away_team_cn = TEAM_NAME_MAP.get(raw_away_team, raw_away_team)
+            match_name_cn = f"{home_team_cn} vs {away_team_cn}"
+
+            # E. 触发普通响铃提醒
+            title = "⏰ 55分钟低波动比赛提醒"
+            content = (
+                f"🏆 联赛: {league_cn}\n"
+                f"⚽ 比赛: {match_name_cn}\n"
+                f"⏱ 当前时间: {minute}分 | 比分: {home_score}-{away_score}\n"
+                f"💡 请去雷速查看赛况，若符合重注口诀可手动输入推演！"
+            )
+            print(f"[触发预警] {league_cn} ({raw_league}) - {match_name_cn} ({minute}分)")
+            send_bark_push(title, content, is_critical=False)
+
+        except Exception as e:
+            print(f"[数据处理异常] 忽略异常单场比赛: {e}")
             continue
-
-        # C. 时间必须在 55-58 分钟
-        if not (55 <= minute <= 58):
-            continue
-
-        # D. 触发普通响铃提醒
-        title = "⏰ 55分钟低波动比赛提醒"
-        content = (
-            f"🏆 联赛: {league}\n"
-            f"⚽ 比赛: {match_name}\n"
-            f"⏱ 当前时间: {minute}分 | 比分: {home_score}-{away_score}\n"
-            f"💡 请去雷速查看赛况，若符合重注口诀可手动输入推演！"
-        )
-        print(f"[触发预警] {league} - {match_name} ({minute}分)")
-        send_bark_push(title, content, is_critical=False)
 
 
 # ==========================================
-# 3. 模式 2：重注信号（手动输入，严格口诀风控）
+# 3. 模式 2：重注信号（支持终端交互或 Actions 环境变量传参）
 # ==========================================
 def run_mode_heavy_manual():
-    print("\n=== [模式 2] 运行 重注信号手动输入校验 ===")
-    print("请依次输入比赛实时数据（严格按照雷速数据填写）：\n")
+    print("\n=== [模式 2] 运行 重注信号数据校验 ===")
+
+    # 优先检测环境变量
+    def get_val(env_key, prompt_text, default_val=None):
+        val = os.getenv(env_key)
+        if val is not None and val.strip() != "":
+            print(f"读取到环境变量 [{env_key}]: {val}")
+            return val.strip()
+        
+        if not sys.stdin.isatty():
+            if default_val is not None:
+                print(f"非交互模式下使用默认值 [{env_key}]: {default_val}")
+                return str(default_val)
+            else:
+                print(f"❌ [错误] CI/Actions 环境下缺少必填环境变量: {env_key}")
+                sys.exit(1)
+        
+        return input(prompt_text).strip()
 
     try:
-        league = input("1. 联赛名称 (如 西乙/俄超): ").strip()
-        minute = int(input("2. 比赛分钟 (50-75): "))
-        score_str = input("3. 当前比分 (如 0-0, 1-0, 0-1, 1-1): ").strip()
-        reds = int(input("4. 全场红牌总数: "))
-        yellows = int(input("5. 全场黄牌总数: "))
-        total_shots_on_target = int(input("6. 全场总射正数: "))
-        total_corners = int(input("7. 全场总角球数: "))
-        leading_shots = int(input("8. 领先方射正数 (若平局请输入较多一方射正): "))
-        trailing_shots = int(input("9. 落后方射正数 (若平局请输入较少一方射正): "))
-        odds = float(input("10. 实时拟投盘口赔率 (1.30-1.65): "))
+        league = get_val("PARAM_LEAGUE", "1. 联赛名称 (如 西乙/俄超): ")
+        minute = int(get_val("PARAM_MINUTE", "2. 比赛分钟 (50-75): "))
+        score_str = get_val("PARAM_SCORE", "3. 当前比分 (如 0-0, 1-0, 0-1, 1-1): ")
+        reds = int(get_val("PARAM_REDS", "4. 全场红牌总数: "))
+        yellows = int(get_val("PARAM_YELLOWS", "5. 全场黄牌总数: "))
+        total_shots_on_target = int(get_val("PARAM_SHOTS", "6. 全场总射正数: "))
+        total_corners = int(get_val("PARAM_CORNERS", "7. 全场总角球数: "))
+        leading_shots = int(get_val("PARAM_LEADING_SHOTS", "8. 领先方射正数 (若平局请输入较多一方射正): "))
+        trailing_shots = int(get_val("PARAM_TRAILING_SHOTS", "9. 落后方射正数 (若平局请输入较少一方射正): "))
+        odds = float(get_val("PARAM_ODDS", "10. 实时拟投盘口赔率 (1.30-1.65): "))
     except ValueError as e:
         print(f"\n❌ [输入错误] 数据格式不合法: {e}")
         return
@@ -235,36 +405,39 @@ def run_mode_heavy_manual():
 def run_mock_test():
     print("\n=== [MOCK 测试模式] ===")
     mock_data = {
-        "data": [
+        "response": [
             {
-                "league_name": "西班牙乙级联赛",
-                "minute": 56,
-                "home_team": "萨拉戈萨",
-                "away_team": "希洪竞技",
-                "home_score": 1,
-                "away_score": 0
+                "league": {"name": "Segunda División"},
+                "fixture": {"status": {"elapsed": 56}},
+                "teams": {"home": {"name": "Real Zaragoza"}, "away": {"name": "Sporting Gijon"}},
+                "goals": {"home": 1, "away": 0}
             },
             {
-                "league_name": "荷兰乙级联赛",  # 极高波动，将被自动过滤
-                "minute": 56,
-                "home_team": "阿贾克斯青年队",
-                "away_team": "埃因霍温FC",
-                "home_score": 2,
-                "away_score": 1
+                "league": {"name": "Eerste Divisie"},
+                "fixture": {"status": {"elapsed": 56}},
+                "teams": {"home": {"name": "Jong Ajax"}, "away": {"name": "FC Eindhoven"}},
+                "goals": {"home": 2, "away": 1}
             }
         ]
     }
     
-    print("1. 测试 55分钟观察预警推送 URL 格式...")
-    for match in mock_data["data"]:
-        league = match["league_name"]
-        minute = match["minute"]
-        if any(k in league for k in ["西乙", "西班牙乙级联赛"]) and 55 <= minute <= 58:
+    print("1. 测试中文翻译及 55分钟观察预警推送...")
+    for item in mock_data["response"]:
+        raw_league = item["league"]["name"]
+        minute = item["fixture"]["status"]["elapsed"]
+        if "Segunda" in raw_league and 55 <= minute <= 58:
+            raw_home = item["teams"]["home"]["name"]
+            raw_away = item["teams"]["away"]["name"]
+            
+            league_cn = LEAGUE_NAME_MAP.get(raw_league, raw_league)
+            home_cn = TEAM_NAME_MAP.get(raw_home, raw_home)
+            away_cn = TEAM_NAME_MAP.get(raw_away, raw_away)
+            
             title = "⏰ 55分钟低波动比赛提醒"
-            content = f"🏆 {league}\n⚽ {match['home_team']} vs {match['away_team']}\n⏱ {minute}分"
+            content = f"🏆 {league_cn}\n⚽ {home_cn} vs {away_cn}\n⏱ {minute}分"
             send_bark_push(title, content, is_critical=False)
 
-    print("\n2. 测试 绝佳重注信号持续响铃推送 URL 格式...")
+    print("\n2. 测试 绝佳重注信号持续响铃推送...")
     title = "🚨🚨 绝佳重注信号"
     content = "🏆 西乙\n⏱ 62分 | 比分: 1-0\n🎯 赔率: 1.45\n💰 建议金额: 30元\n⚡ 模拟测试持续响铃"
     send_bark_push(title, content, is_critical=True)
@@ -275,7 +448,7 @@ def run_mock_test():
 # ==========================================
 def main():
     parser = argparse.ArgumentParser(description="足球滚球 55分钟预警与重注信号系统")
-    parser.add_argument("--manual", action="store_true", help="开启模式2：手动输入重注信号数据")
+    parser.add_argument("--manual", action="store_true", help="开启模式2：重注信号数据校验")
     parser.add_argument("--mock", action="store_true", help="运行 Mock 测试代码")
     args = parser.parse_args()
 
@@ -287,8 +460,7 @@ def main():
         run_mode_heavy_manual()
     else:
         # 默认模式 1：Actions / 自动轮询 55分钟预警
-        api_url = "https://api.example.com/live_matches"  # 替换为你的实际 API 接口
-        run_mode_55m_auto(api_url)
+        run_mode_55m_auto()
 
 
 if __name__ == "__main__":
